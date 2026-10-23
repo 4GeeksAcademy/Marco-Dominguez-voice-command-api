@@ -3,17 +3,20 @@ from fastapi import APIRouter, HTTPException, status
 from src.app.schemas.voice import Task, TaskCreate, TaskReplace, TaskUpdate
 
 router = APIRouter(prefix="/tasks", tags=["tasks"])
+tasks: list[dict[str, object]] = []
 
 
 @router.get("", response_model=list[Task])
 def get_tasks() -> list[Task]:
-    raise_not_implemented("GET /tasks")
+    return [Task.model_validate(task) for task in tasks]
 
 
 @router.post("", response_model=Task, status_code=status.HTTP_201_CREATED)
 def create_task(payload: TaskCreate) -> Task:
-    _ = payload
-    raise_not_implemented("POST /tasks")
+    task_id = max((int(task["id"]) for task in tasks), default=0) + 1
+    task = {"id": task_id, **payload.model_dump()}
+    tasks.append(task)
+    return Task.model_validate(task)
 
 
 @router.put("/{task_id}", response_model=Task)
@@ -21,8 +24,9 @@ def replace_task(
     task_id: int,
     payload: TaskReplace,
 ) -> Task:
-    _ = (task_id, payload)
-    raise_not_implemented("PUT /tasks/{task_id}")
+    task = _find_task(task_id)
+    task.update(payload.model_dump())
+    return Task.model_validate(task)
 
 
 @router.patch("/{task_id}", response_model=Task)
@@ -30,18 +34,23 @@ def update_task(
     task_id: int,
     payload: TaskUpdate,
 ) -> Task:
-    _ = (task_id, payload)
-    raise_not_implemented("PATCH /tasks/{task_id}")
+    task = _find_task(task_id)
+    task.update(payload.model_dump(exclude_unset=True, exclude_none=True))
+    return Task.model_validate(task)
 
 
 @router.delete("/{task_id}")
 def delete_task(task_id: int) -> dict[str, str]:
-    _ = task_id
-    raise_not_implemented("DELETE /tasks/{task_id}")
+    task = _find_task(task_id)
+    tasks.remove(task)
+    return {"message": "Task deleted successfully"}
 
 
-def raise_not_implemented(endpoint: str) -> None:
+def _find_task(task_id: int) -> dict[str, object]:
+    for task in tasks:
+        if task["id"] == task_id:
+            return task
     raise HTTPException(
-        status_code=status.HTTP_501_NOT_IMPLEMENTED,
-        detail=f"Template endpoint pending implementation: {endpoint}",
+        status_code=status.HTTP_404_NOT_FOUND,
+        detail=f"Task {task_id} not found",
     )
